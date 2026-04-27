@@ -49,6 +49,7 @@ const thinkingHistory = document.getElementById('thinking-history');
 // 棋盘元素
 const tictactoeBoard = document.getElementById('tictactoe-board');
 const tictactoe3dBoard = document.getElementById('tictactoe3d-board');
+const liarsbarPanel = document.getElementById('liarsbar-panel');
 const cells2D = document.querySelectorAll('.cell');
 const cells3D = document.querySelectorAll('.cell-3d');
 
@@ -219,10 +220,21 @@ async function startGame() {
             thinkingPanel.classList.add('hidden');
         }
 
-        // 显示对应棋盘
+        // 显示对应棋盘/面板
         showBoard(currentGameType);
         resetBoards();
         updateGameState(data.state);
+
+        // Liar's Bar 特殊处理
+        if (currentGameType === 'liarsbar') {
+            gamePanel.classList.add('hidden');
+            liarsbarPanel.classList.remove('hidden');
+
+            // 初始化 liarsbar 状态
+            const humanPlayer = currentMode === 'human_vs_ai' ? humanSide : null;
+            initLiarsbarGame(currentSessionId, humanPlayer, enableThinking);
+            return;
+        }
 
         // AI vs AI模式：显示自动对战按钮
         if (currentMode === 'ai_vs_ai') {
@@ -249,6 +261,8 @@ function showBoard(gameType) {
         tictactoeBoard.classList.remove('hidden');
     } else if (gameType === 'tictactoe3d') {
         tictactoe3dBoard.classList.remove('hidden');
+    } else if (gameType === 'liarsbar') {
+        // liarsbar 使用专用面板，不需要棋盘
     }
 }
 
@@ -627,3 +641,59 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// Liar's Bar 自动对战
+async function liarsbarAutoPlay() {
+    const autoBtn = document.getElementById('liarsbar-auto-btn');
+    autoBtn.disabled = true;
+
+    try {
+        const response = await fetch('/api/liarsbar/auto_play', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: currentSessionId,
+                max_rounds: 20
+            })
+        });
+
+        const data = await response.json();
+        autoBtn.disabled = false;
+
+        // 更新 liarsbar 状态
+        if (window.liarsbarState) {
+            window.liarsbarState.thinkingHistory = data.rounds_log?.map(r => {
+                if (r.phase === 'play') {
+                    return {
+                        player: r.data?.ai_statement ? 'AI' : 'Unknown',
+                        model: 'AI',
+                        phase: 'play',
+                        thinking: r.data?.thinking || '',
+                        statement: r.data?.ai_statement || '',
+                        claimed: r.data?.ai_claimed || 0
+                    };
+                } else {
+                    return {
+                        player: 'AI',
+                        model: 'AI',
+                        phase: 'challenge',
+                        thinking: r.data?.thinking || '',
+                        decision: r.data?.ai_decision || 'believe'
+                    };
+                }
+            }) || [];
+        }
+
+        // 渲染最终状态
+        if (data.game_over) {
+            showGameOver(data.winner, data.stats);
+        }
+
+    } catch (error) {
+        console.error('Liar\'s Bar 自动对战失败:', error);
+        autoBtn.disabled = false;
+    }
+}
+
+// 导出 liarsbarAutoPlay 供全局使用
+window.liarsbarAutoPlay = liarsbarAutoPlay;

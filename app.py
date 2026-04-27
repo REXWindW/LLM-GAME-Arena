@@ -9,6 +9,7 @@ from datetime import datetime
 import games
 import games.tictactoe
 import games.tictactoe3d
+import games.liarsbar  # 骗子酒馆
 
 from games import get_game_class, get_game_list
 from leaderboard import leaderboard
@@ -336,6 +337,401 @@ def get_player_history(name):
     """获取指定玩家的历史对局"""
     limit = request.args.get('limit', 20, type=int)
     return jsonify(leaderboard.get_player_history(name, limit))
+
+
+# ==================== Liar's Bar 专用 API ====================
+
+@app.route('/api/liarsbar/speak', methods=['POST'])
+def liarsbar_speak():
+    """
+    玩家发言
+
+    请求体:
+    - session_id: 会话ID
+    - player: 'X' 或 'O'
+    - statement: 发言内容
+    """
+    data = request.json
+    session_id = data.get('session_id')
+    player = data.get('player')
+    statement = data.get('statement', '')
+
+    if session_id not in active_sessions:
+        return jsonify({'error': '会话不存在'}), 404
+
+    session = active_sessions[session_id]
+    game = session['game']
+
+    if session['game_type'] != 'liarsbar':
+        return jsonify({'error': '不是骗子酒馆游戏'}), 400
+
+    if game.phase != 'play':
+        return jsonify({'error': '当前不是出牌阶段'}), 400
+
+    if game.current_round['player'] != player:
+        return jsonify({'error': '不是你的回合'}), 400
+
+    # 记录发言
+    game.make_statement(player, statement)
+    logger.info(f"Liar's Bar speak: session={session_id}, player={player}, statement={statement}")
+
+    return jsonify({
+        'success': True,
+        'state': game.get_frontend_state(),
+        'dialogue_history': game.dialogue_history
+    })
+
+
+@app.route('/api/liarsbar/play_cards', methods=['POST'])
+def liarsbar_play_cards():
+    """
+    玩家出牌
+
+    请求体:
+    - session_id: 会话ID
+    - player: 'X' 或 'O'
+    - cards: 选择的卡牌索引列表
+    - claimed_count: 声明的目标牌数量
+    """
+    data = request.json
+    session_id = data.get('session_id')
+    player = data.get('player')
+    card_indices = data.get('cards', [])
+    claimed_count = data.get('claimed_count', len(card_indices))
+
+    if session_id not in active_sessions:
+        return jsonify({'error': '会话不存在'}), 404
+
+    session = active_sessions[session_id]
+    game = session['game']
+
+    if session['game_type'] != 'liarsbar':
+        return jsonify({'error': '不是骗子酒馆游戏'}), 400
+
+    if game.phase != 'play':
+        return jsonify({'error': '当前不是出牌阶段'}), 400
+
+    if game.current_round['player'] != player:
+        return jsonify({'error': '不是你的回合'}), 400
+
+    # 验证出牌
+    if not game.is_valid_move(card_indices):
+        reason = game.get_invalid_reason(card_indices)
+        return jsonify({'error': '无效的出牌', 'reason': reason}), 400
+
+    # 执行出牌
+    game.play_cards(player, card_indices, claimed_count)
+    logger.info(f"Liar's Bar play: session={session_id}, player={player}, cards={card_indices}, claimed={claimed_count}")
+
+    result = {
+        'success': True,
+        'state': game.get_frontend_state(),
+        'phase': game.phase
+    }
+
+    # 如果对手是AI，触发AI质疑决策
+    opponent = 'O' if player == 'X' else 'X'
+    if session[f'{opponent.lower()}_is_ai']:
+        ai_result = _liarsbar_ai_challenge(session_id)
+        result['ai_response'] = ai_result
+        result['state'] = game.get_frontend_state()
+
+    # 检查游戏结束
+    if game.is_game_over():
+        _update_leaderboard(session_id)
+        result['game_over'] = True
+        result['winner'] = game.get_winner()
+
+    return jsonify(result)
+
+
+@app.route('/api/liarsbar/respond', methods=['POST'])
+def liarsbar_respond():
+    """
+    响应出牌（相信或质疑）
+
+    请求体:
+    - session_id: 会话ID
+    - player: 响应者 'X' 或 'O'
+    - action: 'believe' 或 'challenge'
+    """
+    data = request.json
+    session_id = data.get('session_id')
+    player = data.get('player')
+    action = data.get('action')
+
+    if session_id not in active_sessions:
+        return jsonify({'error': '会话不存在'}), 404
+
+    session = active_sessions[session_id]
+    game = session['game']
+
+    if session['game_type'] != 'liarsbar':
+        return jsonify({'error': '不是骗子酒馆游戏'}), 400
+
+    if game.phase != 'challenge':
+        return jsonify({'error': '当前不是质疑阶段'}), 400
+
+    # 验证响应者（应该是出牌者的对手）
+    claimer = game.current_round['player']
+    if player == claimer:
+        return jsonify({'error': '出牌者不能质疑自己'}), 400
+
+    # 执行响应
+    reveal_result = None
+    if action == 'challenge':
+        reveal_result = game.reveal_and_resolve()
+        game.current_round['challenge_result'] = reveal_result
+        logger.info(f"Liar's Bar challenge: session={session_id}, challenger={player}, result={reveal_result}")
+
+    game.respond(player, action)
+    logger.info(f"Liar's Bar respond: session={session_id}, player={player}, action={action}")
+
+    result = {
+        'success': True,
+        'action': action,
+        'reveal': reveal_result,
+        'state': game.get_frontend_state()
+    }
+
+    # 检查游戏结束
+    if game.is_game_over():
+        _update_leaderboard(session_id)
+        result['game_over'] = True
+        result['winner'] = game.get_winner()
+        result['stats'] = game.get_game_stats()
+        return jsonify(result)
+
+    # 如果下一回合出牌者是AI，触发AI出牌
+    next_player = game.current_round['player']
+    if session[f'{next_player.lower()}_is_ai']:
+        ai_result = _liarsbar_ai_play_round(session_id)
+        result['ai_play'] = ai_result
+        result['state'] = game.get_frontend_state()
+
+    return jsonify(result)
+
+
+@app.route('/api/liarsbar/get_hand/<session_id>/<player>')
+def liarsbar_get_hand(session_id, player):
+    """
+    获取玩家私有手牌信息
+
+    参数:
+    - session_id: 会话ID
+    - player: 'X' 或 'O'
+    """
+    if session_id not in active_sessions:
+        return jsonify({'error': '会话不存在'}), 404
+
+    session = active_sessions[session_id]
+    game = session['game']
+
+    if session['game_type'] != 'liarsbar':
+        return jsonify({'error': '不是骗子酒馆游戏'}), 400
+
+    if player not in ['X', 'O']:
+        return jsonify({'error': '无效的玩家标识'}), 400
+
+    state = game.get_frontend_state(for_player=player)
+    return jsonify(state)
+
+
+@app.route('/api/liarsbar/stats/<session_id>')
+def liarsbar_get_stats(session_id):
+    """获取游戏统计数据"""
+    if session_id not in active_sessions:
+        return jsonify({'error': '会话不存在'}), 404
+
+    session = active_sessions[session_id]
+    game = session['game']
+
+    if session['game_type'] != 'liarsbar':
+        return jsonify({'error': '不是骗子酒馆游戏'}), 400
+
+    return jsonify(game.get_game_stats())
+
+
+# ==================== Liar's Bar AI 决策函数 ====================
+
+def _liarsbar_ai_play_round(session_id: str) -> dict:
+    """AI出牌阶段决策"""
+    session = active_sessions[session_id]
+    game = session['game']
+    enable_thinking = session.get('enable_thinking', True)
+
+    if game.is_game_over():
+        return {'game_over': True}
+
+    current_player = game.current_round['player']
+    model = session['player_x'] if current_player == 'X' else session['player_o']
+
+    logger.info(f"Liar's Bar AI play: player={current_player}, model={model}")
+
+    # 生成prompt并调用LLM
+    prompt = game.get_llm_prompt(current_player, enable_thinking)
+    from llm_client import call_llm
+
+    response = call_llm(model, prompt)
+    thinking = game.extract_thinking(response) if response else ''
+
+    # 解析响应
+    parsed = game.parse_llm_response(response) if response else None
+
+    if parsed is None:
+        parsed = game.get_random_valid_move()
+
+    # 执行出牌
+    statement = parsed.get('statement', '')
+    cards = parsed.get('cards', [])
+    claimed = parsed.get('claimed', len(cards))
+
+    # 先发言
+    if statement:
+        game.make_statement(current_player, statement)
+
+    # 再出牌
+    if cards:
+        game.play_cards(current_player, cards, claimed)
+
+    # 记录thinking
+    thinking_record = {
+        'player': current_player,
+        'model': model,
+        'phase': 'play',
+        'statement': statement,
+        'cards': cards,
+        'claimed': claimed,
+        'thinking': thinking,
+        'timestamp': datetime.now().isoformat()
+    }
+    session['thinking_history'].append(thinking_record)
+
+    return {
+        'state': game.get_frontend_state(),
+        'ai_statement': statement,
+        'ai_cards': cards,
+        'ai_claimed': claimed,
+        'thinking': thinking
+    }
+
+
+def _liarsbar_ai_challenge(session_id: str) -> dict:
+    """AI质疑阶段决策"""
+    session = active_sessions[session_id]
+    game = session['game']
+    enable_thinking = session.get('enable_thinking', True)
+
+    if game.is_game_over():
+        return {'game_over': True}
+
+    # 质疑者是出牌者的对手
+    claimer = game.current_round['player']
+    challenger = 'O' if claimer == 'X' else 'X'
+    model = session['player_x'] if challenger == 'X' else session['player_o']
+
+    logger.info(f"Liar's Bar AI challenge: challenger={challenger}, model={model}")
+
+    # 生成prompt并调用LLM
+    prompt = game.get_llm_prompt(challenger, enable_thinking)
+    from llm_client import call_llm
+
+    response = call_llm(model, prompt)
+    thinking = game.extract_thinking(response) if response else ''
+
+    # 解析响应
+    decision = game.parse_llm_response(response) if response else 'believe'
+
+    # 执行响应
+    reveal_result = None
+    if decision == 'challenge':
+        reveal_result = game.reveal_and_resolve()
+        game.current_round['challenge_result'] = reveal_result
+
+    game.respond(challenger, decision)
+
+    # 记录thinking
+    thinking_record = {
+        'player': challenger,
+        'model': model,
+        'phase': 'challenge',
+        'decision': decision,
+        'thinking': thinking,
+        'timestamp': datetime.now().isoformat()
+    }
+    session['thinking_history'].append(thinking_record)
+
+    result = {
+        'state': game.get_frontend_state(),
+        'ai_decision': decision,
+        'thinking': thinking
+    }
+
+    if reveal_result:
+        result['reveal'] = reveal_result
+
+    return result
+
+
+@app.route('/api/liarsbar/auto_play', methods=['POST'])
+def liarsbar_auto_play():
+    """
+    Liar's Bar AI vs AI 自动对战
+
+    请求参数:
+    - session_id: 会话ID
+    - max_rounds: 最大回合数 (默认20)
+    """
+    data = request.json
+    session_id = data.get('session_id')
+    max_rounds = data.get('max_rounds', 20)
+
+    if session_id not in active_sessions:
+        return jsonify({'error': '会话不存在'}), 404
+
+    session = active_sessions[session_id]
+    game = session['game']
+
+    if session['game_type'] != 'liarsbar':
+        return jsonify({'error': '不是骗子酒馆游戏'}), 400
+
+    rounds_log = []
+
+    for _ in range(max_rounds):
+        if game.is_game_over():
+            break
+
+        # 出牌阶段
+        play_result = _liarsbar_ai_play_round(session_id)
+        rounds_log.append({
+            'round': game.round_number,
+            'phase': 'play',
+            'player': game.current_round['player'],
+            'data': play_result
+        })
+
+        if game.is_game_over():
+            break
+
+        # 质疑阶段
+        challenge_result = _liarsbar_ai_challenge(session_id)
+        rounds_log.append({
+            'round': game.round_number,
+            'phase': 'challenge',
+            'data': challenge_result
+        })
+
+    # 更新排行榜
+    if game.is_game_over():
+        _update_leaderboard(session_id)
+
+    return jsonify({
+        'state': game.get_frontend_state(),
+        'rounds_log': rounds_log,
+        'stats': game.get_game_stats(),
+        'game_over': game.is_game_over(),
+        'winner': game.get_winner()
+    })
 
 
 if __name__ == '__main__':

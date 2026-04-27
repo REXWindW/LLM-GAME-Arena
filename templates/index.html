@@ -27,6 +27,11 @@
                     <h3>三维井字棋</h3>
                     <p>重力版三维井字棋，需要下层支撑才能向上落子</p>
                 </div>
+                <div class="game-card" data-game="liarsbar">
+                    <div class="game-icon">🎭</div>
+                    <h3>骗子酒馆</h3>
+                    <p>心理博弈卡牌游戏，通过欺骗与质疑击败对手</p>
+                </div>
             </div>
         </div>
 
@@ -202,6 +207,100 @@
             </div>
         </div>
 
+        <!-- 骗子酒馆游戏面板 -->
+        <div id="liarsbar-panel" class="panel hidden">
+            <h2>骗子酒馆 <span class="game-badge">心理博弈</span></h2>
+
+            <!-- 游戏信息 -->
+            <div id="liarsbar-info" class="liarsbar-info">
+                <!-- 动态填充 -->
+            </div>
+
+            <!-- 信誉值显示 -->
+            <div id="reputation-display" class="reputation-display">
+                <!-- 动态填充 -->
+            </div>
+
+            <!-- 手牌区 -->
+            <div class="hand-section">
+                <h4>我的手牌</h4>
+                <div id="my-hand" class="my-hand">
+                    <!-- 动态填充 -->
+                </div>
+                <div id="selected-count" class="selected-count">已选择 0 张 (最多3张)</div>
+            </div>
+
+            <!-- 对话历史 -->
+            <div class="dialogue-section">
+                <h4>对话历史</h4>
+                <div id="dialogue-history" class="dialogue-history">
+                    <!-- 动态填充 -->
+                </div>
+            </div>
+
+            <!-- 出牌阶段面板 -->
+            <div id="play-phase-panel" class="phase-panel">
+                <h4>出牌阶段</h4>
+                <div class="play-controls">
+                    <div class="statement-input-group">
+                        <label>发言（可以是误导/虚张声势）:</label>
+                        <input type="text" id="statement-input" placeholder="输入你的发言..." class="statement-input">
+                    </div>
+                    <div class="claimed-input-group">
+                        <label>声明目标牌数量:</label>
+                        <input type="number" id="claimed-count-input" min="0" max="3" value="1" class="claimed-input">
+                    </div>
+                    <button id="play-cards-btn" class="btn primary" onclick="playCards()">出牌</button>
+                </div>
+            </div>
+
+            <!-- 质疑阶段面板 -->
+            <div id="challenge-phase-panel" class="phase-panel hidden">
+                <h4>质疑阶段</h4>
+                <div id="claim-info" class="claim-info">
+                    <!-- 动态填充 -->
+                </div>
+                <div class="challenge-controls">
+                    <button id="believe-btn" class="btn secondary" onclick="respondToClaim('believe')">相信</button>
+                    <button id="challenge-btn" class="btn danger" onclick="respondToClaim('challenge')">质疑</button>
+                </div>
+            </div>
+
+            <!-- AI思考历史 -->
+            <div id="liarsbar-thinking-panel" class="thinking-panel">
+                <h3>AI思考过程</h3>
+                <div id="liarsbar-thinking-history" class="thinking-history">
+                    <!-- 动态填充 -->
+                </div>
+            </div>
+
+            <div class="game-actions">
+                <button id="liarsbar-auto-btn" class="btn secondary hidden" onclick="liarsbarAutoPlay()">自动对战</button>
+                <button id="liarsbar-new-btn" class="btn secondary" onclick="location.reload()">新游戏</button>
+            </div>
+        </div>
+
+        <!-- 开牌弹窗 -->
+        <div id="reveal-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>开牌结果</h3>
+                <div id="reveal-content">
+                    <!-- 动态填充 -->
+                </div>
+                <button class="btn secondary" onclick="closeRevealModal()">关闭</button>
+            </div>
+        </div>
+
+        <!-- 游戏结束弹窗 -->
+        <div id="game-over-modal" class="modal hidden">
+            <div class="modal-content">
+                <div id="game-over-content">
+                    <!-- 动态填充 -->
+                </div>
+                <button class="btn primary" onclick="closeGameOverModal()">返回</button>
+            </div>
+        </div>
+
         <!-- 排行榜 -->
         <div id="leaderboard-panel" class="panel">
             <h2>排行榜</h2>
@@ -225,5 +324,6 @@
     </div>
 
     <script src="/static/game.js"></script>
+    <script src="/static/liarsbar.js"></script>
 </body>
 </html>
