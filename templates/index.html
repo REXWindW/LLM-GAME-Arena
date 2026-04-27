@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM-GAME-Arena | AI模型对战竞技场</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>LLM-GAME-Arena</h1>
+            <p class="subtitle">AI模型对战竞技场</p>
+        </header>
+
+        <!-- 游戏选择页面 -->
+        <div id="game-select-panel" class="panel">
+            <h2>选择游戏</h2>
+            <div class="game-cards">
+                <div class="game-card" data-game="tictactoe">
+                    <div class="game-icon">⬜</div>
+                    <h3>井字棋</h3>
+                    <p>经典二维井字棋，三连线获胜</p>
+                </div>
+                <div class="game-card" data-game="tictactoe3d">
+                    <div class="game-icon">📦</div>
+                    <h3>三维井字棋</h3>
+                    <p>重力版三维井字棋，需要下层支撑才能向上落子</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏设置面板 -->
+        <div id="setup-panel" class="panel hidden">
+            <h2 id="selected-game-title">游戏设置</h2>
+
+            <div class="mode-selector">
+                <label>游戏模式：</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="mode" value="ai_vs_ai" checked>
+                        模型 vs 模型
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="mode" value="human_vs_ai">
+                        人类 vs 模型
+                    </label>
+                </div>
+            </div>
+
+            <div class="player-inputs">
+                <!-- AI vs AI 模式 -->
+                <div id="ai-vs-ai-inputs">
+                    <div class="player-group">
+                        <label>X方模型 (先手)：</label>
+                        <input type="text" id="player-x" placeholder="输入模型名称" value="gpt-4">
+                    </div>
+                    <div class="player-group">
+                        <label>O方模型 (后手)：</label>
+                        <input type="text" id="player-o" placeholder="输入模型名称" value="claude-3-opus">
+                    </div>
+                </div>
+
+                <!-- Human vs AI 模式 -->
+                <div id="human-vs-ai-inputs" class="hidden">
+                    <div class="player-group">
+                        <label>你的名称：</label>
+                        <input type="text" id="human-name" placeholder="输入你的名称" value="Human">
+                    </div>
+                    <div class="player-group">
+                        <label>对手模型：</label>
+                        <input type="text" id="ai-model" placeholder="输入模型名称" value="gpt-4">
+                    </div>
+                    <div class="player-group">
+                        <label>你的位置：</label>
+                        <div class="radio-group inline">
+                            <label class="radio-label small">
+                                <input type="radio" name="human-side" value="X" checked>
+                                先手 (X)
+                            </label>
+                            <label class="radio-label small">
+                                <input type="radio" name="human-side" value="O">
+                                后手 (O)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thinking 开关 -->
+                <div class="player-group">
+                    <label>观察AI思考：</label>
+                    <div class="radio-group inline">
+                        <label class="radio-label small">
+                            <input type="checkbox" id="enable-thinking" checked>
+                            启用 (显示AI的thinking过程)
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setup-actions">
+                <button id="back-btn" class="btn secondary">返回</button>
+                <button id="start-btn" class="btn primary">开始游戏</button>
+            </div>
+        </div>
+
+        <!-- 游戏面板 -->
+        <div id="game-panel" class="panel hidden">
+            <h2>对战进行中</h2>
+
+            <div class="game-info">
+                <div class="player-info">
+                    <span class="symbol X">X</span>
+                    <span id="x-name" class="name">-</span>
+                </div>
+                <div class="vs">VS</div>
+                <div class="player-info">
+                    <span class="symbol O">O</span>
+                    <span id="o-name" class="name">-</span>
+                </div>
+            </div>
+
+            <div class="status">
+                <span id="current-turn">X方回合</span>
+                <span id="game-status"></span>
+            </div>
+
+            <!-- 二维井字棋棋盘 -->
+            <div id="tictactoe-board" class="board hidden">
+                <div class="cell" data-pos="1"></div>
+                <div class="cell" data-pos="2"></div>
+                <div class="cell" data-pos="3"></div>
+                <div class="cell" data-pos="4"></div>
+                <div class="cell" data-pos="5"></div>
+                <div class="cell" data-pos="6"></div>
+                <div class="cell" data-pos="7"></div>
+                <div class="cell" data-pos="8"></div>
+                <div class="cell" data-pos="9"></div>
+            </div>
+
+            <!-- 三维井字棋棋盘 -->
+            <div id="tictactoe3d-board" class="board-3d hidden">
+                <div class="layer" data-layer="0">
+                    <div class="layer-label">Layer 0 (底层)</div>
+                    <div class="layer-grid">
+                        <div class="cell-3d" data-pos="L0-R0-C0"></div>
+                        <div class="cell-3d" data-pos="L0-R0-C1"></div>
+                        <div class="cell-3d" data-pos="L0-R0-C2"></div>
+                        <div class="cell-3d" data-pos="L0-R1-C0"></div>
+                        <div class="cell-3d" data-pos="L0-R1-C1"></div>
+                        <div class="cell-3d" data-pos="L0-R1-C2"></div>
+                        <div class="cell-3d" data-pos="L0-R2-C0"></div>
+                        <div class="cell-3d" data-pos="L0-R2-C1"></div>
+                        <div class="cell-3d" data-pos="L0-R2-C2"></div>
+                    </div>
+                </div>
+                <div class="layer" data-layer="1">
+                    <div class="layer-label">Layer 1 (中层)</div>
+                    <div class="layer-grid">
+                        <div class="cell-3d" data-pos="L1-R0-C0"></div>
+                        <div class="cell-3d" data-pos="L1-R0-C1"></div>
+                        <div class="cell-3d" data-pos="L1-R0-C2"></div>
+                        <div class="cell-3d" data-pos="L1-R1-C0"></div>
+                        <div class="cell-3d" data-pos="L1-R1-C1"></div>
+                        <div class="cell-3d" data-pos="L1-R1-C2"></div>
+                        <div class="cell-3d" data-pos="L1-R2-C0"></div>
+                        <div class="cell-3d" data-pos="L1-R2-C1"></div>
+                        <div class="cell-3d" data-pos="L1-R2-C2"></div>
+                    </div>
+                </div>
+                <div class="layer" data-layer="2">
+                    <div class="layer-label">Layer 2 (顶层)</div>
+                    <div class="layer-grid">
+                        <div class="cell-3d" data-pos="L2-R0-C0"></div>
+                        <div class="cell-3d" data-pos="L2-R0-C1"></div>
+                        <div class="cell-3d" data-pos="L2-R0-C2"></div>
+                        <div class="cell-3d" data-pos="L2-R1-C0"></div>
+                        <div class="cell-3d" data-pos="L2-R1-C1"></div>
+                        <div class="cell-3d" data-pos="L2-R1-C2"></div>
+                        <div class="cell-3d" data-pos="L2-R2-C0"></div>
+                        <div class="cell-3d" data-pos="L2-R2-C1"></div>
+                        <div class="cell-3d" data-pos="L2-R2-C2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="ai-status" class="ai-status hidden">
+                <span class="thinking">AI思考中...</span>
+            </div>
+
+            <div class="game-actions">
+                <button id="auto-play-btn" class="btn secondary hidden">自动对战</button>
+                <button id="new-game-btn" class="btn secondary">新游戏</button>
+            </div>
+
+            <!-- AI思考历史 -->
+            <div id="thinking-panel" class="thinking-panel hidden">
+                <h3>AI思考过程</h3>
+                <div id="thinking-history" class="thinking-history">
+                    <!-- 动态填充 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 排行榜 -->
+        <div id="leaderboard-panel" class="panel">
+            <h2>排行榜</h2>
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>名称</th>
+                        <th>胜</th>
+                        <th>负</th>
+                        <th>平</th>
+                        <th>积分</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <!-- 动态填充 -->
+                </tbody>
+            </table>
+            <button id="refresh-leaderboard" class="btn secondary">刷新</button>
+        </div>
+    </div>
+
+    <script src="/static/game.js"></script>
+</body>
+</html>

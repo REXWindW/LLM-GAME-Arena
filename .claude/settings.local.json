@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(conda create *)",
+      "Bash(/Users/rexwind/miniforge3/envs/llm-game/bin/pip install *)",
+      "Bash(/Users/rexwind/miniforge3/envs/llm-game/bin/python *)",
+      "Bash(pkill -f \"python app.py\")",
+      "Bash(date -Iseconds)",
+      "Bash(echo \"=== Log started at $\\(date -Iseconds\\) ===\")"
+    ]
+  }
+}
