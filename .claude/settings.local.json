@@ -6,7 +6,11 @@
       "Bash(/Users/rexwind/miniforge3/envs/llm-game/bin/python *)",
       "Bash(pkill -f \"python app.py\")",
       "Bash(date -Iseconds)",
-      "Bash(echo \"=== Log started at $\\(date -Iseconds\\) ===\")"
+      "Bash(echo \"=== Log started at $\\(date -Iseconds\\) ===\")",
+      "Bash(python3 *)",
+      "Bash(pip3 install *)",
+      "Bash(python *)",
+      "Bash(conda info *)"
     ]
   }
 }
