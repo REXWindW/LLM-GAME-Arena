@@ -11,7 +11,8 @@
       "Bash(pip3 install *)",
       "Bash(python *)",
       "Bash(conda info *)",
-      "Bash(chmod +x *)"
+      "Bash(chmod +x *)",
+      "Bash(conda run *)"
     ]
   }
 }

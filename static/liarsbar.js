@@ -9,6 +9,7 @@ let liarsbarState = {
     sessionId: null,
     phase: 'play',           // 'play' | 'challenge'
     myPlayer: null,          // 'X' 或 'O'
+    isObserver: false,       // 是否为纯观察模式（AI vs AI）
     myHand: [],              // 我的手牌
     targetCard: null,        // 目标牌
     reputation: {X: 3, O: 3},// 信誉值
@@ -23,10 +24,11 @@ let liarsbarState = {
 
 // ==================== 初始化 ====================
 
-function initLiarsbarGame(sessionId, player, enableThinking = true) {
+function initLiarsbarGame(sessionId, player, enableThinking = true, isObserver = false) {
     liarsbarState.sessionId = sessionId;
     liarsbarState.myPlayer = player;
     liarsbarState.enableThinking = enableThinking;
+    liarsbarState.isObserver = isObserver;
     liarsbarState.selectedCards = [];
 
     // 获取初始状态
@@ -37,7 +39,7 @@ function initLiarsbarGame(sessionId, player, enableThinking = true) {
 }
 
 function showLiarsbarPanel() {
-    document.getElementById('tictactoe-panel').classList.add('hidden');
+    document.getElementById('game-panel').classList.add('hidden');
     document.getElementById('liarsbar-panel').classList.remove('hidden');
 }
 
@@ -65,13 +67,22 @@ function updateLiarsbarState(data) {
     liarsbarState.currentClaim = data.current_claim;
     liarsbarState.roundNumber = data.round_number;
 
+    // 观察者模式下永远不是我的回合
+    if (liarsbarState.isObserver) {
+        liarsbarState.isMyTurn = false;
+        console.log('[Liar\'s Bar] 观察者模式，不可操作');
+        return;
+    }
+
     // 判断是否是我的回合
     if (liarsbarState.phase === 'play') {
         liarsbarState.isMyTurn = (data.current_player === liarsbarState.myPlayer);
+        console.log(`[Liar\'s Bar] 出牌阶段，当前玩家=${data.current_player}, 我=${liarsbarState.myPlayer}, isMyTurn=${liarsbarState.isMyTurn}`);
     } else if (liarsbarState.phase === 'challenge') {
         // 质疑阶段，对手操作
         const claimer = data.current_claim?.player;
         liarsbarState.isMyTurn = (claimer !== liarsbarState.myPlayer);
+        console.log(`[Liar\'s Bar] 质疑阶段，出牌者=${claimer}, 我=${liarsbarState.myPlayer}, isMyTurn=${liarsbarState.isMyTurn}`);
     }
 }
 
@@ -155,7 +166,7 @@ function renderMyHand() {
 }
 
 function toggleCardSelection(index) {
-    if (liarsbarState.phase !== 'play' || !liarsbarState.isMyTurn) return;
+    if (liarsbarState.isObserver || liarsbarState.phase !== 'play' || !liarsbarState.isMyTurn) return;
 
     const idx = liarsbarState.selectedCards.indexOf(index);
 
@@ -194,6 +205,13 @@ function renderPhasePanel() {
     const playPanel = document.getElementById('play-phase-panel');
     const challengePanel = document.getElementById('challenge-phase-panel');
 
+    // 观察者模式下隐藏操作面板
+    if (liarsbarState.isObserver) {
+        playPanel?.classList.add('hidden');
+        challengePanel?.classList.add('hidden');
+        return;
+    }
+
     if (liarsbarState.phase === 'play') {
         playPanel?.classList.remove('hidden');
         challengePanel?.classList.add('hidden');
@@ -201,7 +219,9 @@ function renderPhasePanel() {
         // 更新出牌按钮状态
         const playBtn = document.getElementById('play-cards-btn');
         if (playBtn) {
-            playBtn.disabled = !liarsbarState.isMyTurn || liarsbarState.selectedCards.length === 0;
+            const disabled = !liarsbarState.isMyTurn || liarsbarState.selectedCards.length === 0;
+            playBtn.disabled = disabled;
+            console.log(`[Liar\'s Bar] 出牌按钮状态: disabled=${disabled}, isMyTurn=${liarsbarState.isMyTurn}, selected=${liarsbarState.selectedCards.length}`);
         }
     } else if (liarsbarState.phase === 'challenge') {
         playPanel?.classList.add('hidden');
@@ -507,6 +527,13 @@ function getCardClass(card) {
 }
 
 // 导出函数供全局使用
+window.initLiarsbarGame = initLiarsbarGame;
+window.toggleCardSelection = toggleCardSelection;
+window.submitStatement = submitStatement;
+window.playCards = playCards;
+window.respondToClaim = respondToClaim;
+window.closeRevealModal = closeRevealModal;
+window.closeGameOverModal = closeGameOverModal;
 window.initLiarsbarGame = initLiarsbarGame;
 window.toggleCardSelection = toggleCardSelection;
 window.submitStatement = submitStatement;

@@ -231,8 +231,14 @@ async function startGame() {
             liarsbarPanel.classList.remove('hidden');
 
             // 初始化 liarsbar 状态
-            const humanPlayer = currentMode === 'human_vs_ai' ? humanSide : null;
-            initLiarsbarGame(currentSessionId, humanPlayer, enableThinking);
+            const isObserver = (currentMode === 'ai_vs_ai');
+            const humanPlayer = currentMode === 'human_vs_ai' ? humanSide : 'X';
+            initLiarsbarGame(currentSessionId, humanPlayer, enableThinking, isObserver);
+
+            // AI vs AI 模式显示自动对战按钮
+            if (isObserver) {
+                document.getElementById('liarsbar-auto-btn')?.classList.remove('hidden');
+            }
             return;
         }
 
@@ -402,6 +408,17 @@ async function autoPlay() {
         autoPlayBtn.disabled = false;
 
         updateBoard(data.state);
+
+        // 将 moves_log 转换为 thinking history 格式并渲染
+        if (data.moves_log && data.moves_log.length > 0) {
+            const thinkingHistory = data.moves_log.map(item => ({
+                player: item.player,
+                model: item.model,
+                move: item.move,
+                thinking: item.thinking || ''
+            }));
+            updateThinkingHistory(thinkingHistory);
+        }
 
         if (data.state.is_game_over) {
             showGameResult(data.state);
